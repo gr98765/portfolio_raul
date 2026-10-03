@@ -1,7 +1,7 @@
 """
 Portfolio chatbot for Gaurangi Raul — no persona name, just a plain chat.
 
-Architecture (mirrors the VijBot pattern):
+Architecture ():
   1. Try to match the user's message against a set of canned Q&A pairs
      using TF-IDF (character n-grams) + cosine similarity. Cheap, fast,
      no API call — handles greetings, small talk, off-topic/troll input,
@@ -15,7 +15,7 @@ Architecture (mirrors the VijBot pattern):
 import streamlit as st
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from openai import OpenAI
+from openai import OpenAI, BadRequestError
 
 from master_data import NAME, EMAIL, FULL_CONTEXT
 from stored_questions import CANNED_RESPONSES
@@ -47,7 +47,9 @@ How to answer:
   fintech pipeline, and the FastAPI work. AI/RAG question: lead with the
   multi-agent MCP project, RAG-PRISM, and the Right Skale platform.
   Research question: lead with the IEEE FIE'25 paper and the IRJET paper.
-- Keep it to 2-5 sentences unless asked for more. Be warm and direct.
+- Keep answers short: 2-5 sentences. For broad questions like "tell me about her
+  experience", give a tight overview (one sentence per role, most recent first),
+  then offer to go deeper on any of them. Be warm and direct.
 - Never invent facts, numbers, employers, dates, or links. If the data does not
   cover something (availability, salary, visa status, opinions), say you don't
   have that and suggest emailing {NAME} at {EMAIL}.
@@ -97,13 +99,26 @@ def call_llm(history):
     client = OpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY)
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + history
 
-    response = client.chat.completions.create(
+    kwargs = dict(
         model=LLM_MODEL,
         messages=messages,
-        max_tokens=300,
-        temperature=0.4,
+        max_tokens=1500,   # reasoning models spend part of this budget thinking
+        temperature=0.3,
     )
-    return response.choices[0].message.content
+    try:
+        # Low reasoning effort = faster, and leaves more of the budget for the answer.
+        response = client.chat.completions.create(
+            **kwargs, extra_body={"reasoning_effort": "low"}
+        )
+    except BadRequestError:
+        # Model doesn't support that option; retry without it.
+        response = client.chat.completions.create(**kwargs)
+
+    choice = response.choices[0]
+    text = choice.message.content or ""
+    if choice.finish_reason == "length":
+        text += "\n\n(That answer got cut off. Ask me to continue and I'll pick up from there.)"
+    return text
 
 
 # ---------------------------------------------------------------------------
@@ -116,6 +131,9 @@ st.markdown(
     """
     <style>
     .stApp { background-color: #14171C; color: #ECEAE4; }
+    /* Hide Streamlit chrome (toolbar, menu, footer) so visitors just see the chat */
+    [data-testid="stToolbar"], [data-testid="stHeader"], [data-testid="stDecoration"],
+    #MainMenu, footer, .stAppDeployButton { display: none !important; visibility: hidden !important; }
     .chat-bubble-user {
         background-color: #1C2027; color: #ECEAE4;
         padding: 10px 14px; border-radius: 12px; margin: 6px 0;
