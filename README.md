@@ -6,7 +6,7 @@ MS in Machine Learning, University of Arizona. I build RAG and LLM systems, data
 
 Don't want to scroll? Ask it anything about my experience, projects, or research and it answers from my actual work:
 
-** [Open the chat](https://your-app-name.streamlit.app)**
+** [Open the chat](https://portfolio-chat-raul.streamlit.app/)**
 
 Try: *"Does she have backend experience?"* · *"Tell me about the multi-agent project"* · *"Has she published anything?"*
 
